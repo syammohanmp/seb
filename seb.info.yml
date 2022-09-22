@@ -1,0 +1,4 @@
+name: Scheduled Entity Block
+description: seb provides administrators place content entities as blocks with a scheduler configuration.
+type: module
+core_version_requirement: ^8 || ^9 || ^10

@@ -1,0 +1,19 @@
+{
+  "name": "drupal/devel",
+  "description": "Various blocks, pages, and functions for developers.",
+  "type": "drupal-module",
+  "homepage": "https://www.drupal.org/project/seb",
+  "authors": [
+    {
+      "name": "Syam Mohan M P",
+      "email": "syamvilakudy@hotmail.com",
+      "homepage": "https://www.drupal.org/u/syammohanmp",
+      "role": "Maintainer"
+    }
+  ],
+  "support": {
+    "issues": "https://www.drupal.org/project/issues/seb",
+    "source": "https://git.drupalcode.org/project/seb"
+  },
+  "license": "GPL-3.0"
+}
