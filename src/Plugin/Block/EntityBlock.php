@@ -13,6 +13,7 @@ use Drupal\Core\Form\FormStateInterface;
 use Drupal\Core\Plugin\ContainerFactoryPluginInterface;
 use Drupal\Core\Session\AccountInterface;
 use Symfony\Component\DependencyInjection\ContainerInterface;
+use Drupal\Core\Datetime\DrupalDateTime;
 
 /**
  * Scheduled Entity block.
@@ -65,7 +66,7 @@ class EntityBlock extends BlockBase implements ContainerFactoryPluginInterface {
    *
    * @var array
    */
-  protected $view_mode_options;
+  protected $viewModeOptions;
 
   /**
    * An array of counters for the recursive rendering protection.
@@ -80,6 +81,21 @@ class EntityBlock extends BlockBase implements ContainerFactoryPluginInterface {
    * @var \Drupal\Core\Logger\LoggerChannelFactoryInterface
    */
   protected $loggerFactory;
+
+  /**
+   * An array of days.
+   *
+   * @var array
+   */
+  protected $days = [
+    'monday' => 'Monday',
+    'tuesday' => 'Tuesday',
+    'wednesday' => 'Wednesday',
+    'thursday' => 'Thursday',
+    'friday' => 'Friday',
+    'saturday' => 'Saturday',
+    'sunday' => 'Sunday',
+  ];
 
   /**
    * {@inheritdoc}
@@ -103,7 +119,7 @@ class EntityBlock extends BlockBase implements ContainerFactoryPluginInterface {
       $this->entityViewBuilder = $entityTypeManager->getHandler($this->entityTypeName, 'view_builder');
     }
 
-    $this->view_mode_options = $entityDisplayRepository->getViewModeOptions($this->entityTypeName);
+    $this->viewModeOptions = $entityDisplayRepository->getViewModeOptions($this->entityTypeName);
     $this->loggerFactory = $logger_factory;
   }
 
@@ -145,9 +161,11 @@ class EntityBlock extends BlockBase implements ContainerFactoryPluginInterface {
     $form['view_mode'] = [
       '#type' => 'select',
       '#title' => $this->t('View mode'),
-      '#options' => $this->view_mode_options,
+      '#options' => $this->viewModeOptions,
       '#default_value' => $view_mode,
     ];
+
+    $form['schedule'] = $this->getScheduleField($form, $form_state);
 
     return $form;
   }
@@ -185,6 +203,41 @@ class EntityBlock extends BlockBase implements ContainerFactoryPluginInterface {
         '@entity_label' => $entity->label(),
         '@admin_label' => $admin_label,
       ]);
+    }
+
+    $schedule = $form_state->getValue('schedule');
+
+    $this->configuration['seb_type'] = $schedule['seb_type'];
+
+    if (!empty($schedule['time']['start'])) {
+      $this->configuration['schedule_time_start'] = $schedule['time']['start']->format('h:i:s A');
+    }
+
+    if (!empty($schedule['time']['end'])) {
+      $this->configuration['schedule_time_end'] = $schedule['time']['end']->format('h:i:s A');
+    }
+
+    if (!empty($schedule['between_dates']['start'])) {
+      $this->configuration['between_dates_start'] = $schedule['between_dates']['start']->format('Y-m-d h:i:s A');
+    }
+
+    if (!empty($schedule['between_dates']['end'])) {
+      $this->configuration['between_dates_end'] = $schedule['between_dates']['end']->format('Y-m-d h:i:s A');
+    }
+
+    if ($schedule['seb_type'] == 'custom') {
+      foreach ($schedule['dates_fieldset'] as $day_index => $day_item) {
+        $day_settings_key = 'dates_fieldset_' . $day_index;
+        $this->configuration[$day_settings_key . '_enabled'] = $day_item['enabled'];
+
+        if (!empty($day_item['time']['start'])) {
+          $this->configuration[$day_settings_key . '_time_start'] = $day_item['time']['start']->format('h:i:s A');
+        }
+
+        if (!empty($day_item['time']['end'])) {
+          $this->configuration[$day_settings_key . '_time_end'] = $day_item['time']['end']->format('h:i:s A');
+        }
+      }
     }
   }
 
@@ -269,6 +322,161 @@ class EntityBlock extends BlockBase implements ContainerFactoryPluginInterface {
     }
 
     return NULL;
+  }
+
+  /**
+   * Get Schedule Field.
+   */
+  public function getScheduleField($form, FormStateInterface $form_state) {
+    $config = $this->configuration;
+
+    $schedule_field['seb_type'] = [
+      '#type' => 'select',
+      '#title' => $this->t('Schedule type'),
+      '#options' => [
+        'daily' => $this->t('Daily'),
+        'week_days' => $this->t('Week days'),
+        'weekend_days' => $this->t('Weekend days'),
+        'between_dates' => $this->t('Between dates'),
+        'custom' => $this->t('Custom'),
+      ],
+      "#empty_option" => $this->t('- Select -'),
+      '#default_value' => $this->configuration['seb_type'] ?? '',
+    ];
+
+    $schedule_field['time'] = [
+      '#type' => 'container',
+      '#attributes' => [
+        'class' => [
+          'container-inline',
+        ],
+      ],
+      '#states' => [
+        'invisible' => [
+          ':input[name="settings[schedule][seb_type]"]' => [
+            ['value' => 'custom'],
+            ['value' => 'between_dates'],
+          ],
+        ],
+      ],
+    ];
+
+    $schedule_field['time']['start'] = [
+      '#type' => 'datetime',
+      '#title' => $this->t('Starts on'),
+      '#title_display' => 'invisible',
+      '#date_date_element' => 'none',
+    ];
+
+    if (!empty($config['schedule_time_start'])) {
+      $schedule_field['time']['start']['#default_value'] = DrupalDateTime::createFromTimestamp(
+        strtotime($config['schedule_time_start']));
+    }
+
+    $schedule_field['time']['end'] = [
+      '#type' => 'datetime',
+      '#title' => $this->t('Ends on'),
+      '#title_display' => 'invisible',
+      '#date_date_element' => 'none',
+    ];
+
+    if (!empty($config['schedule_time_end'])) {
+      $schedule_field['time']['end']['#default_value'] = DrupalDateTime::createFromTimestamp(
+        strtotime($config['schedule_time_end']));
+    }
+
+    $schedule_field['between_dates'] = [
+      '#type' => 'container',
+      '#attributes' => [
+        'class' => [
+          'container-inline',
+        ],
+      ],
+      '#states' => [
+        'visible' => [
+          ':input[name="settings[schedule][seb_type]"]' => [
+            ['value' => 'custom'],
+            ['value' => 'between_dates'],
+          ],
+        ],
+      ],
+    ];
+
+    $schedule_field['between_dates']['start'] = [
+      '#type' => 'datetime',
+      '#title' => $this->t('Starts on'),
+      '#title_display' => 'invisible',
+    ];
+
+    if (!empty($config['between_dates_start'])) {
+      $schedule_field['between_dates']['start']['#default_value'] = DrupalDateTime::createFromTimestamp(
+        strtotime($config['between_dates_start']));
+    }
+
+    $schedule_field['between_dates']['end'] = [
+      '#type' => 'datetime',
+      '#title' => $this->t('Ends on'),
+      '#title_display' => 'invisible',
+    ];
+
+    if (!empty($config['between_dates_end'])) {
+      $schedule_field['between_dates']['end']['#default_value'] = DrupalDateTime::createFromTimestamp(
+        strtotime($config['between_dates_end']));
+    }
+
+    $schedule_field['dates_fieldset'] = [
+      '#type' => 'fieldset',
+      '#states' => [
+        'visible' => [
+          ':input[name="settings[schedule][seb_type]"]' => ['value' => 'custom'],
+        ],
+      ],
+    ];
+
+    foreach ($this->days as $day_index => $day) {
+      $day_settings_key = 'dates_fieldset_' . $day_index;
+
+      $schedule_field['dates_fieldset'][$day_index]['enabled'] = [
+        '#type' => 'checkbox',
+        '#title' => $day,
+        '#default_value' => $config[$day_settings_key . '_enabled'],
+      ];
+
+      $schedule_field['dates_fieldset'][$day_index]['time'] = [
+        '#type' => 'container',
+        '#attributes' => [
+          'class' => [
+            'container-inline',
+          ],
+        ],
+      ];
+
+      $schedule_field['dates_fieldset'][$day_index]['time']['start'] = [
+        '#type' => 'datetime',
+        '#title' => $this->t('Starts on'),
+        '#title_display' => 'invisible',
+        '#date_date_element' => 'none',
+      ];
+
+      if (!empty($config[$day_settings_key . '_time_start'])) {
+        $schedule_field['dates_fieldset'][$day_index]['time']['start']['#default_value'] = DrupalDateTime::createFromTimestamp(
+          strtotime($config[$day_settings_key . '_time_start']));
+      }
+
+      $schedule_field['dates_fieldset'][$day_index]['time']['end'] = [
+        '#type' => 'datetime',
+        '#title' => $this->t('Ends on'),
+        '#title_display' => 'invisible',
+        '#date_date_element' => 'none',
+      ];
+
+      if (!empty($config[$day_settings_key . '_time_end'])) {
+        $schedule_field['dates_fieldset'][$day_index]['time']['end']['#default_value'] = DrupalDateTime::createFromTimestamp(
+          strtotime($config[$day_settings_key . '_time_end']));
+      }
+    }
+
+    return $schedule_field;
   }
 
 }
