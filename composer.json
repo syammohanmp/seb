@@ -1,6 +1,6 @@
 {
-  "name": "drupal/devel",
-  "description": "Various blocks, pages, and functions for developers.",
+  "name": "drupal/seb",
+  "description": "Scheduled Entity Blocks and functions for Site builders and Developers.",
   "type": "drupal-module",
   "homepage": "https://www.drupal.org/project/seb",
   "authors": [
