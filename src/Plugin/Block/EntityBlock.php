@@ -245,6 +245,10 @@ class EntityBlock extends BlockBase implements ContainerFactoryPluginInterface {
    * {@inheritdoc}
    */
   public function build() {
+    if (!$this->isValidNow($this->configuration)) {
+      return [];
+    }
+
     if ($entity = $this->getEntity()) {
       $recursive_render_id = $entity->getEntityTypeId() . ':' . $entity->id();
       if (isset(static::$recursiveRenderDepth[$recursive_render_id])) {
@@ -477,6 +481,72 @@ class EntityBlock extends BlockBase implements ContainerFactoryPluginInterface {
     }
 
     return $schedule_field;
+  }
+
+  /**
+   * Check whether today is weekend or not.
+   */
+  public function isTodayWeekend() {
+    return in_array(date("l"), ["Saturday", "Sunday"]);
+  }
+
+  /**
+   * Check if the given block config is valid now.
+   *
+   * @param array $item
+   *   Block configuration array.
+   */
+  public function isValidNow(array $item) {
+    if (empty($item['seb_type'])) {
+      return FALSE;
+    }
+
+    // Check daily, week_days and weekend ads.
+    if ($item['seb_type'] === 'daily' || $item['seb_type'] === 'week_days' || $item['seb_type'] === 'weekend_days') {
+      if (!empty($item['schedule_time_start']) && !empty($item['schedule_time_end'])) {
+        $starts_on = strtotime($item['schedule_time_start']);
+        $ends_on = strtotime($item['schedule_time_end']);
+        $time_now = strtotime(date('h:i:s A'));
+        if ($time_now >= $starts_on && $time_now <= $ends_on) {
+          if ($item['seb_type'] === 'daily' ||
+              ($item['seb_type'] === 'week_days' && !$this->isTodayWeekend()) ||
+              ($item['seb_type'] === 'weekend_days' && $this->isTodayWeekend())
+             ) {
+            return TRUE;
+          }
+        }
+      }
+    }
+
+    // Check between dates and custom days.
+    if ($item['seb_type'] === 'between_dates' || $item['seb_type'] === 'custom') {
+      if (!empty($item['between_dates_start']) && !empty($item['between_dates_end'])) {
+        $btw_starts_on = strtotime($item['between_dates_start']);
+        $btw_ends_on = strtotime($item['between_dates_end']);
+        $datetime_now = strtotime(date('Y-m-d h:i:s A'));
+        if ($datetime_now >= $btw_starts_on && $datetime_now <= $btw_ends_on) {
+          if ($item['seb_type'] === 'between_dates') {
+            return TRUE;
+          }
+          elseif ($item['seb_type'] === 'custom') {
+            $today = strtolower(date('l'));
+            if ($item['dates_fieldset_' . $today . '_enabled'] === 1) {
+              if (!empty($item['dates_fieldset_' . $today . '_time_start']) && !empty($item['dates_fieldset_' . $today . '_time_end'])) {
+                $time_starts_on = strtotime($item['dates_fieldset_' . $today . '_time_start']);
+                $time_ends_on = strtotime($item['dates_fieldset_' . $today . '_time_end']);
+                $time_now = strtotime(date('h:i:s A'));
+                if ($time_now >= $time_starts_on && $time_now <= $time_ends_on) {
+                  return TRUE;
+                }
+              }
+
+            }
+          }
+        }
+      }
+    }
+
+    return FALSE;
   }
 
 }
